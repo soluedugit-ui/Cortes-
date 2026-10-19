@@ -1,14 +1,17 @@
 from rectpack import newPacker, PackingMode, PackingBin, SORT_AREA
-from rectpack.guillotine import GuillotineBssfSas
+# 1. Cambia 'GuillotineBssfSas' por 'GuillotineBssfMaxas'
+from rectpack.guillotine import GuillotineBssfMaxas 
 
 def optimize_2d(pieces, stock, kerf=0.0, allow_rotation=True):
     packer = newPacker(
         mode=PackingMode.Offline,
         bin_algo=PackingBin.Global,
-        pack_algo=GuillotineBssfSas, # Fuerza cortes de guillotina (lado a lado)
+        # 2. Actualiza el algoritmo aquí
+        pack_algo=GuillotineBssfMaxas, 
         sort_algo=SORT_AREA,
         rotation=allow_rotation
     )
+    # ... (el resto del código se queda exactamente igual)
 
     # Añadir tableros (stock)
     for width, height, qty in stock:
