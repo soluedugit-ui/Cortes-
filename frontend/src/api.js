@@ -18,3 +18,24 @@ export async function optimizeCuts(payload) {
   }
   return data;
 }
+
+export async function optimizeCuts2D(payload) {
+  let res;
+  try {
+    res = await fetch("/api/optimize-2d", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error("No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = Array.isArray(data.detail)
+      ? data.detail.map((d) => d.msg).join("; ")
+      : data.detail;
+    throw new Error(detail || "Error al calcular el plan de cortes 2D");
+  }
+  return data;
+}

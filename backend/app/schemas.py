@@ -70,3 +70,28 @@ class OptimizeResponse(BaseModel):
     summary: SummaryOut
     mode: str = "fast"
     proven_optimal: bool | None = None  # solo en modo exact
+
+class Piece2DIn(BaseModel):
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    quantity: int = Field(ge=1)
+
+class Stock2DIn(BaseModel):
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    quantity: int | None = None
+
+class Optimize2DRequest(BaseModel):
+    pieces: list[Piece2DIn] = Field(min_length=1, max_length=MAX_PIECE_TYPES)
+    stock: list[Stock2DIn] = Field(min_length=1, max_length=MAX_STOCK_TYPES)
+    kerf: float = Field(default=3.0, ge=0, le=1000, description="Ancho de corte de la sierra")
+    allow_rotation: bool = Field(default=True)
+
+    @model_validator(mode="after")
+    def _limit_total_pieces(self):
+        total = sum(p.quantity for p in self.pieces)
+        if total > MAX_TOTAL_PIECES:
+            raise ValueError(
+                f"Máximo {MAX_TOTAL_PIECES} piezas por cálculo (pediste {total})."
+            )
+        return self

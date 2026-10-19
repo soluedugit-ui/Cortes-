@@ -7,7 +7,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .limits import check_rate_limit, exact_slot
 from .optimizer import optimize, summarize
-from .schemas import BarOut, OptimizeRequest, OptimizeResponse
+from .schemas import BarOut, OptimizeRequest, OptimizeResponse, Optimize2DRequest
+from .optimizer_2d import optimize_2d
 
 app = FastAPI(title="Optimizador de cortes", version="0.2.0")
 
@@ -75,6 +76,17 @@ def optimize_cuts(req: OptimizeRequest):
         summary=summarize(bars, req.kerf),
     )
 
+@app.post("/api/optimize-2d", dependencies=[Depends(check_rate_limit)])
+def optimize_cuts_2d(req: Optimize2DRequest):
+    pieces = [(p.width, p.height, p.quantity) for p in req.pieces]
+    stock = [(s.width, s.height, s.quantity) for s in req.stock]
+    
+    try:
+        boards = optimize_2d(pieces, stock, req.kerf, req.allow_rotation)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {"boards": boards}
 
 # En producción el frontend compilado vive en ./static (lo copia el Dockerfile).
 # Debe montarse al final para no tapar las rutas /api.

@@ -2,3 +2,4 @@ fastapi==0.143.3
 uvicorn[standard]==0.53.0
 pydantic==2.13.5
 ortools==9.15.6755
+rectpack==0.2.2
