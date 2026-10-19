@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: optimizador-cortes
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
