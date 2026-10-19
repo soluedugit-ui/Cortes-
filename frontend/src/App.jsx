@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { optimizeCuts } from "./api.js";
+import { optimizeCuts, optimizeCuts2D } from "./api.js";
 import PlanDiagram from "./PlanDiagram.jsx";
+import PlanDiagram2D from "./PlanDiagram2D.jsx"; // Importamos el nuevo diagrama
 
 const fmt = (n) => Number(n.toFixed(2)).toString();
 
@@ -56,14 +57,28 @@ function EditableTable({ title, rows, setRows, columns, newRow, hint }) {
 }
 
 export default function App() {
-  const [pieces, setPieces] = useState([
+  // Pestaña actual: "1D" o "2D"
+  const [appMode, setAppMode] = useState("1D");
+
+  // Estado 1D
+  const [pieces1D, setPieces1D] = useState([
     { length: "1250", quantity: "8" },
     { length: "830", quantity: "10" },
     { length: "410", quantity: "14" },
   ]);
-  const [stock, setStock] = useState([{ length: "6000", quantity: "" }]);
+  const [stock1D, setStock1D] = useState([{ length: "6000", quantity: "" }]);
+  const [method1D, setMethod1D] = useState("fast");
+
+  // Estado 2D
+  const [pieces2D, setPieces2D] = useState([
+    { width: "800", height: "600", quantity: "4" },
+    { width: "400", height: "400", quantity: "6" }
+  ]);
+  const [stock2D, setStock2D] = useState([{ width: "2440", height: "1220", quantity: "" }]);
+  const [allowRotation, setAllowRotation] = useState(true);
+
+  // Estados compartidos
   const [kerf, setKerf] = useState("3");
-  const [mode, setMode] = useState("fast");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -73,28 +88,52 @@ export default function App() {
     setError("");
     setResult(null);
     setSlow(false);
-    const payload = {
-      pieces: pieces
-        .filter((p) => p.length && p.quantity)
-        .map((p) => ({ length: Number(p.length), quantity: Number(p.quantity) })),
-      stock: stock
-        .filter((s) => s.length)
-        .map((s) => ({
-          length: Number(s.length),
-          quantity: s.quantity === "" ? null : Number(s.quantity),
-        })),
-      kerf: Number(kerf || 0),
-      mode,
-    };
-    if (!payload.pieces.length || !payload.stock.length) {
-      setError("Agrega al menos una pieza y una barra.");
-      return;
-    }
     setLoading(true);
-    // El hosting gratuito "duerme" el servidor; la primera visita puede tardar.
+
     const slowTimer = setTimeout(() => setSlow(true), 4000);
+
     try {
-      setResult(await optimizeCuts(payload));
+      if (appMode === "1D") {
+        const payload = {
+          pieces: pieces1D
+            .filter((p) => p.length && p.quantity)
+            .map((p) => ({ length: Number(p.length), quantity: Number(p.quantity) })),
+          stock: stock1D
+            .filter((s) => s.length)
+            .map((s) => ({
+              length: Number(s.length),
+              quantity: s.quantity === "" ? null : Number(s.quantity),
+            })),
+          kerf: Number(kerf || 0),
+          mode: method1D,
+        };
+        if (!payload.pieces.length || !payload.stock.length) {
+          throw new Error("Agrega al menos una pieza y una barra.");
+        }
+        const data = await optimizeCuts(payload);
+        setResult({ type: "1D", data });
+      } else {
+        // Lógica 2D
+        const payload = {
+          pieces: pieces2D
+            .filter((p) => p.width && p.height && p.quantity)
+            .map((p) => ({ width: Number(p.width), height: Number(p.height), quantity: Number(p.quantity) })),
+          stock: stock2D
+            .filter((s) => s.width && s.height)
+            .map((s) => ({
+              width: Number(s.width),
+              height: Number(s.height),
+              quantity: s.quantity === "" ? null : Number(s.quantity),
+            })),
+          kerf: Number(kerf || 0),
+          allow_rotation: allowRotation,
+        };
+        if (!payload.pieces.length || !payload.stock.length) {
+          throw new Error("Agrega al menos una pieza y un tablero.");
+        }
+        const data = await optimizeCuts2D(payload);
+        setResult({ type: "2D", data });
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -108,36 +147,78 @@ export default function App() {
     <main>
       <header>
         <h1>Optimizador de cortes</h1>
-        <p>Corte lineal (tubos, perfiles, barras). Usa la misma unidad en todo (ej. mm).</p>
+        <p>Usa la misma unidad en todo (ej. mm, cm).</p>
+        <div className="tabs">
+          <button 
+            className={appMode === "1D" ? "" : "secondary"} 
+            onClick={() => { setAppMode("1D"); setResult(null); }}
+          >
+            Corte Lineal (1D)
+          </button>
+          <button 
+            className={appMode === "2D" ? "" : "secondary"} 
+            onClick={() => { setAppMode("2D"); setResult(null); }}
+          >
+            Tableros / Paneles (2D)
+          </button>
+        </div>
       </header>
 
-      <div className="grid">
-        <EditableTable
-          title="Piezas a cortar"
-          rows={pieces}
-          setRows={setPieces}
-          columns={[
-            { key: "length", label: "Largo", placeholder: "1250" },
-            { key: "quantity", label: "Cantidad", placeholder: "8" },
-          ]}
-          newRow={() => ({ length: "", quantity: "" })}
-        />
-        <EditableTable
-          title="Barras disponibles"
-          hint="Deja la cantidad vacía si tienes todas las que necesites."
-          rows={stock}
-          setRows={setStock}
-          columns={[
-            { key: "length", label: "Largo", placeholder: "6000" },
-            { key: "quantity", label: "Cantidad (opcional)", placeholder: "∞" },
-          ]}
-          newRow={() => ({ length: "", quantity: "" })}
-        />
-      </div>
+      {appMode === "1D" ? (
+        <div className="grid">
+          <EditableTable
+            title="Piezas a cortar (Tubos, Barras)"
+            rows={pieces1D}
+            setRows={setPieces1D}
+            columns={[
+              { key: "length", label: "Largo", placeholder: "1250" },
+              { key: "quantity", label: "Cantidad", placeholder: "8" },
+            ]}
+            newRow={() => ({ length: "", quantity: "" })}
+          />
+          <EditableTable
+            title="Barras disponibles"
+            hint="Deja la cantidad vacía si tienes todas las que necesites."
+            rows={stock1D}
+            setRows={setStock1D}
+            columns={[
+              { key: "length", label: "Largo", placeholder: "6000" },
+              { key: "quantity", label: "Cantidad (opcional)", placeholder: "∞" },
+            ]}
+            newRow={() => ({ length: "", quantity: "" })}
+          />
+        </div>
+      ) : (
+        <div className="grid">
+          <EditableTable
+            title="Piezas a cortar (Madera, Metal, etc.)"
+            rows={pieces2D}
+            setRows={setPieces2D}
+            columns={[
+              { key: "width", label: "Ancho (X)", placeholder: "800" },
+              { key: "height", label: "Alto (Y)", placeholder: "600" },
+              { key: "quantity", label: "Cantidad", placeholder: "4" },
+            ]}
+            newRow={() => ({ width: "", height: "", quantity: "" })}
+          />
+          <EditableTable
+            title="Tableros disponibles"
+            hint="Deja la cantidad vacía si tienes todos los que necesites."
+            rows={stock2D}
+            setRows={setStock2D}
+            columns={[
+              { key: "width", label: "Ancho (X)", placeholder: "2440" },
+              { key: "height", label: "Alto (Y)", placeholder: "1220" },
+              { key: "quantity", label: "Cantidad (opcional)", placeholder: "∞" },
+            ]}
+            newRow={() => ({ width: "", height: "", quantity: "" })}
+          />
+        </div>
+      )}
 
       <section className="card inline">
         <label>
-          Ancho de corte de la sierra
+          Ancho de corte (sierra)
           <input
             type="number"
             min="0"
@@ -146,13 +227,26 @@ export default function App() {
             onChange={(e) => setKerf(e.target.value)}
           />
         </label>
-        <label>
-          Método
-          <select value={mode} onChange={(e) => setMode(e.target.value)}>
-            <option value="fast">Rápido (heurística)</option>
-            <option value="exact">Exacto (OR-Tools)</option>
-          </select>
-        </label>
+
+        {appMode === "1D" ? (
+          <label>
+            Método
+            <select value={method1D} onChange={(e) => setMethod1D(e.target.value)}>
+              <option value="fast">Rápido (heurística)</option>
+              <option value="exact">Exacto (OR-Tools)</option>
+            </select>
+          </label>
+        ) : (
+          <label style={{ flexDirection: "row", alignItems: "center", gap: "8px" }}>
+            <input 
+              type="checkbox" 
+              checked={allowRotation} 
+              onChange={(e) => setAllowRotation(e.target.checked)} 
+            />
+            Permitir rotar piezas (90°)
+          </label>
+        )}
+
         <button onClick={calculate} disabled={loading}>
           {loading ? "Calculando…" : "Calcular plan de cortes"}
         </button>
@@ -166,41 +260,47 @@ export default function App() {
 
       {error && <div className="error">{error}</div>}
 
-      {result && (
+      {result && result.type === "1D" && (
         <section className="card">
           <h2>
-            Resultado
-            {result.mode === "exact" && (
+            Resultado 1D
+            {result.data.mode === "exact" && (
               <span className="badge">
-                {result.proven_optimal ? "óptimo demostrado" : "mejor encontrado en el tiempo dado"}
+                {result.data.proven_optimal ? "óptimo demostrado" : "mejor encontrado en el tiempo dado"}
               </span>
             )}
           </h2>
           <div className="stats">
             <div>
-              <strong>{result.summary.total_bars}</strong>
+              <strong>{result.data.summary.total_bars}</strong>
               <span>barras</span>
             </div>
             <div>
-              <strong>{result.summary.waste_percent}%</strong>
+              <strong>{result.data.summary.waste_percent}%</strong>
               <span>desperdicio</span>
             </div>
             <div>
-              <strong>{fmt(result.summary.total_kerf_loss)}</strong>
+              <strong>{fmt(result.data.summary.total_kerf_loss)}</strong>
               <span>perdido en sierra</span>
             </div>
+          </div>
+          <PlanDiagram bars={result.data.bars} />
+          <button className="secondary" onClick={() => window.print()}>
+            Imprimir plan
+          </button>
+        </section>
+      )}
+
+      {result && result.type === "2D" && (
+        <section className="card">
+          <h2>Resultado 2D (Tableros)</h2>
+          <div className="stats">
             <div>
-              <strong>{fmt(result.summary.total_leftover)}</strong>
-              <span>en sobrantes</span>
+              <strong>{result.data.boards.length}</strong>
+              <span>tableros usados</span>
             </div>
           </div>
-          <p className="hint">
-            Por largo:{" "}
-            {result.summary.bars_by_length
-              .map((b) => `${b.count} × ${fmt(b.stock_length)}`)
-              .join(" · ")}
-          </p>
-          <PlanDiagram bars={result.bars} />
+          <PlanDiagram2D boards={result.data.boards} />
           <button className="secondary" onClick={() => window.print()}>
             Imprimir plan
           </button>
